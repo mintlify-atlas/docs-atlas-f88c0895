@@ -1,0 +1,52 @@
+{
+  "projectType": "general",
+  "projectName": "MobaXterm Discord RPC",
+  "projectDescription": "A Windows DLL that adds Discord Rich Presence functionality to MobaXterm terminal emulator.",
+  "theme": "aspen",
+  "primaryColor": "#7289DA",
+  "lightColor": "#5865F2",
+  "darkColor": "#404EED",
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get Started",
+        "pages": [
+          "introduction",
+          "installation"
+        ]
+      },
+      {
+        "group": "Guides",
+        "pages": [
+          "guides/versions",
+          "guides/building"
+        ]
+      },
+      {
+        "group": "Reference",
+        "pages": [
+          "reference/architecture",
+          "reference/troubleshooting"
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Discord Rich Presence integration for MobaXterm",
+    "Two versions: complete (full activity tracking) and silence (basic status)",
+    "Tracks text editor sessions, terminal activity, and local bash sessions",
+    "Cross-platform build system using GitHub Actions",
+    "Windows DLL injection-based implementation"
+  ],
+  "publicApiSurface": [
+    "StartDiscordRPC() - Exported C function to start Discord RPC",
+    "Discord_Initialize() - Initialize Discord connection",
+    "Discord_UpdatePresence() - Update presence state",
+    "Discord_RunCallbacks() - Process Discord callbacks",
+    "Discord_Shutdown() - Clean shutdown",
+    "UpdateMobaState() - Track MobaXterm process state (complete version)",
+    "UpdateDiscordPresence() - Update presence based on state (complete version)",
+    "IsProcessRunning() - Check if process is active (complete version)",
+    "bashrun() - Check if local bash is running (complete version)"
+  ]
+}
