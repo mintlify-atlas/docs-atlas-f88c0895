@@ -1,0 +1,327 @@
+---
+title: 'Building from Source'
+description: 'Learn how to compile the MobaXterm Discord RPC DLL from source code'
+icon: 'hammer'
+---
+
+This guide covers how to build the Discord RPC DLL from source code using either Windows or Linux.
+
+## Prerequisites
+
+<Steps>
+  <Step title="Choose Your Platform">
+    You can build on:
+    - **Windows**: Using CFF Explorer (recommended for beginners)
+    - **Linux**: Using MinGW-w64 cross-compilation (automated builds)
+  </Step>
+  
+  <Step title="Get discord-rpc.dll">
+    Download the Discord RPC library (Windows 32-bit) from the official repository:
+    
+    ```bash
+    wget https://github.com/discord/discord-rpc/releases/download/v3.4.0/discord-rpc-win.zip
+    unzip discord-rpc-win.zip
+    ```
+    
+    The required files are in `discord-rpc/win32-dynamic/`
+  </Step>
+  
+  <Step title="Get Source Files">
+    Clone the repository or download:
+    - `complete.cpp` (for complete version)
+    - `silence.cpp` (for silence version)
+    - `discord_rpc.h` (header file from discord-rpc)
+  </Step>
+</Steps>
+
+---
+
+## Building on Windows
+
+<Info>
+The Windows build process uses CFF Explorer to modify the MobaXterm executable and integrate the Discord RPC functionality.
+</Info>
+
+<Steps>
+  <Step title="Install CFF Explorer">
+    Download and install [CFF Explorer](https://ntcore.com/?page_id=388) - a free PE editor for Windows executables.
+  </Step>
+  
+  <Step title="Prepare the DLL">
+    Obtain the pre-built `discord-rpc.dll` from the discord-rpc repository:
+    
+    - Navigate to `discord-rpc/win32-dynamic/bin/`
+    - Copy `discord-rpc.dll` to your MobaXterm directory
+  </Step>
+  
+  <Step title="Modify MobaXterm.exe with CFF Explorer">
+    <Warning>
+    **Always backup your original MobaXterm.exe before proceeding!**
+    </Warning>
+    
+    1. Open the original `MobaXterm.exe` in CFF Explorer
+    2. Navigate to **Import Adder**
+    3. Click **Add Module**
+    4. Select `discord-rpc.dll`
+    5. Choose **Import by Name** for export functions
+    6. Click **Rebuild Import Table**
+    7. Save the modified executable
+  </Step>
+  
+  <Step title="Deploy Files">
+    Copy to your MobaXterm installation directory:
+    ```
+    C:\Program Files (x86)\Mobatek\MobaXterm
+    ```
+    
+    Required files:
+    - Modified `MobaXterm.exe`
+    - `final.dll` (your compiled DLL)
+    - `discord-rpc.dll`
+  </Step>
+</Steps>
+
+---
+
+## Building on Linux (Cross-Compilation)
+
+<Note>
+This method is used by the GitHub Actions CI/CD pipeline and is ideal for automated builds.
+</Note>
+
+### Install MinGW-w64
+
+On Debian/Ubuntu-based systems:
+
+```bash
+sudo apt update && sudo apt install -y mingw-w64
+```
+
+### Build Process
+
+<Tabs>
+  <Tab title="Complete Version">
+    <Steps>
+      <Step title="Download Discord RPC">
+        ```bash
+        wget https://github.com/discord/discord-rpc/releases/download/v3.4.0/discord-rpc-win.zip
+        unzip discord-rpc-win.zip
+        ```
+      </Step>
+      
+      <Step title="Compile the DLL">
+        ```bash
+        i686-w64-mingw32-g++ -shared -o final.dll complete.cpp \
+          -I"discord-rpc/win32-dynamic/include" \
+          -L"discord-rpc/win32-dynamic/lib" \
+          -ldiscord-rpc -luser32 -static-libgcc -static-libstdc++
+        ```
+        
+        **Compiler flags explained:**
+        - `-shared`: Create a shared library (DLL)
+        - `-o final.dll`: Output filename
+        - `-I`: Include directory for headers
+        - `-L`: Library directory for linking
+        - `-ldiscord-rpc`: Link against Discord RPC
+        - `-luser32`: Link against Windows user32.lib
+        - `-static-libgcc -static-libstdc++`: Statically link runtime libraries
+      </Step>
+      
+      <Step title="Verify Build">
+        Check that `final.dll` was created successfully:
+        ```bash
+        ls -lh final.dll
+        file final.dll
+        ```
+        
+        Expected output:
+        ```
+        final.dll: PE32 executable (DLL) (console) Intel 80386, for MS Windows
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="Silence Version">
+    <Steps>
+      <Step title="Download Discord RPC">
+        ```bash
+        wget https://github.com/discord/discord-rpc/releases/download/v3.4.0/discord-rpc-win.zip
+        unzip discord-rpc-win.zip
+        ```
+      </Step>
+      
+      <Step title="Compile the DLL">
+        ```bash
+        i686-w64-mingw32-g++ -shared -o final.dll silence.cpp \
+          -I"discord-rpc/win32-dynamic/include" \
+          -L"discord-rpc/win32-dynamic/lib" \
+          -ldiscord-rpc -luser32 -static-libgcc -static-libstdc++
+        ```
+      </Step>
+      
+      <Step title="Verify Build">
+        Check that `final.dll` was created successfully:
+        ```bash
+        ls -lh final.dll
+        file final.dll
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+---
+
+## GitHub Actions Automation
+
+The project includes automated build workflows for both versions.
+
+<CodeGroup>
+```yaml build-dll.yml (Complete)
+name: Build DLL for Windows - complete.cpp
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install mingw-w64
+        run: sudo apt update && sudo apt install -y mingw-w64
+
+      - name: Download and extract Discord RPC
+        run: |
+          wget https://github.com/discord/discord-rpc/releases/download/v3.4.0/discord-rpc-win.zip
+          unzip discord-rpc-win.zip
+
+      - name: Build DLL
+        run: |
+          set -e
+          i686-w64-mingw32-g++ -shared -o final.dll complete.cpp \
+          -I"discord-rpc/win32-dynamic/include" \
+          -L"discord-rpc/win32-dynamic/lib" \
+          -ldiscord-rpc -luser32 -static-libgcc -static-libstdc++ \
+          2>&1 | tee build.log
+
+      - name: Upload artifact (DLL)
+        uses: actions/upload-artifact@v4
+        with:
+          name: built-dll
+          path: final.dll
+```
+
+```yaml build-dll2.yml (Silence)
+name: Build DLL for Windows - silence.cpp
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install mingw-w64
+        run: sudo apt update && sudo apt install -y mingw-w64
+
+      - name: Download and extract Discord RPC
+        run: |
+          wget https://github.com/discord/discord-rpc/releases/download/v3.4.0/discord-rpc-win.zip
+          unzip discord-rpc-win.zip
+
+      - name: Build DLL
+        run: |
+          set -e
+          i686-w64-mingw32-g++ -shared -o final.dll silence.cpp \
+          -I"discord-rpc/win32-dynamic/include" \
+          -L"discord-rpc/win32-dynamic/lib" \
+          -ldiscord-rpc -luser32 -static-libgcc -static-libstdc++ \
+          2>&1 | tee build.log
+
+      - name: Upload artifact (DLL)
+        uses: actions/upload-artifact@v4
+        with:
+          name: built-dll
+          path: final.dll
+```
+</CodeGroup>
+
+<Info>
+Pre-built DLLs are available from the [GitHub Actions artifacts](https://github.com/poloputoamo/mobaxterm-discord-rpc/actions) page.
+</Info>
+
+---
+
+## Troubleshooting
+
+### Common Build Errors
+
+<AccordionGroup>
+  <Accordion title="Missing discord_rpc.h">
+    **Error**: `fatal error: discord_rpc.h: No such file or directory`
+    
+    **Solution**: Ensure the include path points to the correct location:
+    ```bash
+    -I"discord-rpc/win32-dynamic/include"
+    ```
+    
+    Verify the header file exists:
+    ```bash
+    ls discord-rpc/win32-dynamic/include/discord_rpc.h
+    ```
+  </Accordion>
+  
+  <Accordion title="Undefined reference to Discord functions">
+    **Error**: `undefined reference to 'Discord_Initialize'`
+    
+    **Solution**: Ensure you're linking against the Discord RPC library:
+    ```bash
+    -L"discord-rpc/win32-dynamic/lib" -ldiscord-rpc
+    ```
+    
+    Verify the library file exists:
+    ```bash
+    ls discord-rpc/win32-dynamic/lib/
+    ```
+  </Accordion>
+  
+  <Accordion title="DLL not loading in MobaXterm">
+    **Issue**: MobaXterm fails to start or Discord RPC doesn't work
+    
+    **Solutions**:
+    1. Ensure `discord-rpc.dll` is in the same directory as `MobaXterm.exe`
+    2. Verify the DLL is 32-bit (not 64-bit):
+       ```bash
+       file final.dll
+       # Should show: Intel 80386
+       ```
+    3. Check that the import table was properly modified with CFF Explorer
+    4. Run MobaXterm as administrator
+  </Accordion>
+</AccordionGroup>
+
+<Warning>
+**Important Notes**:
+- Always use the **32-bit** (i686) MinGW compiler, not x86_64
+- The discord-rpc.dll must be the **win32-dynamic** version, not win64
+- Test your build thoroughly before deploying to production
+</Warning>

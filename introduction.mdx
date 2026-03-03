@@ -1,0 +1,129 @@
+---
+title: Introduction
+description: Add Discord Rich Presence functionality to MobaXterm and show your activity status
+---
+
+# MobaXterm Discord RPC Integration
+
+MobaXterm Discord RPC brings Discord Rich Presence functionality to MobaXterm, allowing you to display your MobaXterm activity directly in your Discord profile. Whether you're editing files, running terminal sessions, or working with bash, your Discord status will reflect your current work.
+
+## What is MobaXterm Discord RPC?
+
+This integration modifies MobaXterm to communicate with Discord's Rich Presence API, enabling real-time activity tracking. It uses a custom DLL injection system to monitor MobaXterm processes and update your Discord status accordingly.
+
+<Warning>
+This requires modifying original MobaXterm files. **Always backup your installation first** before proceeding with the installation.
+</Warning>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Real-Time Activity Tracking" icon="chart-line">
+    Monitor your MobaXterm sessions live on Discord, showing what you're currently working on
+  </Card>
+  
+  <Card title="Two Integration Modes" icon="toggle-on">
+    Choose between complete tracking (editor + terminal) or silence mode (basic status only)
+  </Card>
+  
+  <Card title="Terminal Detection" icon="terminal">
+    Automatically detects MoTTY terminal sessions and local bash instances
+  </Card>
+  
+  <Card title="Editor Integration" icon="file-code">
+    Tracks MobaRTE text editor sessions with live updates
+  </Card>
+</CardGroup>
+
+## Version Types
+
+### Complete Mode (`mobaxterm-complete`)
+
+The complete version provides comprehensive activity tracking:
+
+- **Active MobaRTE text editor sessions** - Shows when you're editing files
+- **Open terminal sessions** - Displays terminal activity including MoTTY sessions
+- **Local bash detection** - Identifies when you're running bash locally
+- **Dynamic status updates** - Updates every 500ms for real-time accuracy
+
+<Note>
+The complete mode uses process monitoring to detect `MobaRTE.exe`, `MoTTY.exe`, and `bash.exe` processes, providing detailed presence information.
+</Note>
+
+```cpp
+void UpdateMobaState() {
+    currentState.isEditing = IsProcessRunning(L"MobaRTE.exe");
+    currentState.isTerminalActive = IsProcessRunning(L"MoTTY.exe");
+    currentState.isLocalBash = bashrun();
+}
+```
+
+### Silence Mode (`mobaxterm-silence`)
+
+The minimal version for users who prefer basic presence:
+
+- **Simple status display** - Shows only that MobaXterm is running
+- **Lightweight** - Minimal resource usage with basic Discord integration
+- **Privacy-focused** - No detailed activity tracking
+
+```cpp
+DiscordRichPresence presence;
+memset(&presence, 0, sizeof(presence));
+presence.state = "";
+presence.details = "";
+presence.startTimestamp = time(0);
+presence.largeImageKey = "mobaxterm-logo";
+```
+
+## How It Works
+
+The integration works by:
+
+1. **DLL Injection** - A custom `final.dll` is loaded into MobaXterm's process space
+2. **Discord RPC Connection** - The DLL initializes Discord RPC with application ID `1347921816777392244`
+3. **Process Monitoring** - Continuously checks for MobaXterm child processes (complete mode only)
+4. **Presence Updates** - Updates Discord status based on detected activity
+
+```cpp
+DWORD WINAPI DiscordThread(LPVOID lpParam) {
+    DiscordEventHandlers handlers;
+    memset(&handlers, 0, sizeof(handlers));
+    handlers.ready = HandleDiscordReady;
+
+    Discord_Initialize("1347921816777392244", &handlers, 1, NULL);
+    g_StartTimestamp = time(0);
+
+    while (g_Running) {
+        UpdateMobaState();
+        UpdateDiscordPresence();
+        Discord_RunCallbacks();
+        Sleep(500);
+    }
+
+    Discord_Shutdown();
+    return 0;
+}
+```
+
+## Get Started
+
+<CardGroup cols={2}>
+  <Card title="Installation Guide" icon="download" href="/installation">
+    Step-by-step instructions to install MobaXterm Discord RPC
+  </Card>
+  
+  <Card title="Build from Source" icon="code" href="/guides/building">
+    Advanced guide for building the integration yourself
+  </Card>
+</CardGroup>
+
+## Requirements
+
+- **Windows OS** - MobaXterm is Windows-only
+- **Administrator Privileges** - Required for file replacement and RPC functionality
+- **MobaXterm** - Any recent version
+- **Discord Desktop App** - Must be running for Rich Presence to work
+
+<Note>
+This integration uses the official [Discord RPC library](https://github.com/discord/discord-rpc) for Windows 32-bit systems.
+</Note>

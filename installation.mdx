@@ -1,0 +1,168 @@
+---
+title: Installation
+description: Step-by-step guide to install MobaXterm Discord RPC integration
+---
+
+# Installation Guide
+
+This guide will walk you through installing the MobaXterm Discord RPC integration. The process involves replacing the original MobaXterm executable with a modified version and adding required DLL files.
+
+<Warning>
+**Backup your installation first!** This process modifies original MobaXterm files. Always create a backup of your original `MobaXterm.exe` before proceeding. If anything goes wrong, you can restore from backup.
+</Warning>
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+- **Windows OS** - MobaXterm and this integration only work on Windows
+- **Administrator Privileges** - Required to modify files in Program Files and run MobaXterm with RPC functionality
+- **MobaXterm Installed** - You should have MobaXterm already installed on your system
+- **Discord Desktop App** - Must be installed and running for Rich Presence to appear
+
+<Note>
+The default MobaXterm installation directory is `C:\Program Files (x86)\Mobatek\MobaXterm`. If you installed it elsewhere, adjust the path accordingly.
+</Note>
+
+## Installation Steps
+
+<Steps>
+  <Step title="Download Required Files">
+    Navigate to the [GitHub Releases page](https://github.com/poloputoamo/mobaxterm-discord-rpc/releases) and download the latest release.
+    
+    You'll need to download:
+    - **Modified executable**: Either `mobaxterm-complete.exe` or `mobaxterm-silence.exe` (choose your preferred version)
+    - **final.dll**: The main integration DLL
+    - **discord-rpc.dll**: Discord Rich Presence library
+    
+    <Note>
+    **Choosing a version:**
+    - `mobaxterm-complete` - Tracks editor sessions and terminal activity
+    - `mobaxterm-silence` - Shows only basic program status
+    </Note>
+    
+    After downloading, rename your chosen executable to `MobaXterm.exe`:
+    - `mobaxterm-complete.exe` → `MobaXterm.exe`
+    - OR `mobaxterm-silence.exe` → `MobaXterm.exe`
+  </Step>
+
+  <Step title="Locate MobaXterm Installation Directory">
+    Open File Explorer and navigate to your MobaXterm installation directory.
+    
+    The typical installation path is:
+    ```cmd
+    C:\Program Files (x86)\Mobatek\MobaXterm
+    ```
+    
+    You can also find it by:
+    1. Right-clicking the MobaXterm desktop shortcut
+    2. Selecting "Open file location"
+    3. If it opens to a shortcut folder, right-click the shortcut again and select "Open file location"
+  </Step>
+
+  <Step title="Backup Original Files">
+    Before making any changes, create a backup of your original `MobaXterm.exe`:
+    
+    1. Copy `MobaXterm.exe` in the installation directory
+    2. Paste it in the same folder or a safe backup location
+    3. Rename the copy to `MobaXterm.exe.backup` or `MobaXterm-original.exe`
+    
+    <Warning>
+    **Do not skip this step!** If the integration doesn't work or causes issues, you'll need this backup to restore normal functionality.
+    </Warning>
+  </Step>
+
+  <Step title="Replace and Add Files">
+    Now replace the original files with the downloaded ones:
+    
+    1. **Delete or rename** the original `MobaXterm.exe` in the installation directory
+    2. **Copy** your renamed `MobaXterm.exe` (from downloaded files) to the installation directory
+    3. **Copy** `final.dll` to the installation directory
+    4. **Copy** `discord-rpc.dll` to the installation directory
+    
+    Your installation directory should now contain:
+    ```
+    C:\Program Files (x86)\Mobatek\MobaXterm\
+    ├── MobaXterm.exe          (modified version)
+    ├── final.dll              (integration DLL)
+    ├── discord-rpc.dll        (Discord RPC library)
+    ├── ... (other original files)
+    ```
+    
+    <Note>
+    You may need administrator privileges to modify files in the Program Files directory. If prompted, click "Continue" or "Yes" to allow the changes.
+    </Note>
+  </Step>
+
+  <Step title="Launch MobaXterm">
+    You're ready to test the integration:
+    
+    1. Make sure **Discord is running** on your system
+    2. Launch MobaXterm
+    3. **Run as Administrator** (right-click → Run as administrator) to ensure RPC functionality works properly
+    
+    <Note>
+    Running as administrator is recommended for the first launch to ensure all components initialize correctly.
+    </Note>
+  </Step>
+
+  <Step title="Verify Discord Rich Presence">
+    Check if the integration is working:
+    
+    1. Open Discord and view your profile
+    2. You should see "MobaXterm" in your activity status
+    3. If using **complete mode**, try:
+       - Opening a terminal session (should show "Terminal activa")
+       - Editing a file with MobaRTE (should show "Editando archivos")
+       - Starting a local bash session (should show "Terminal local")
+    4. If using **silence mode**, you'll see a basic MobaXterm status
+    
+    The presence updates every 500ms, so changes should appear almost instantly.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+If Discord Rich Presence isn't showing:
+
+<Warning>
+**Common Issues:**
+- Discord isn't running - Start Discord before launching MobaXterm
+- Not running as administrator - Try launching MobaXterm as administrator
+- Activity status disabled - Check Discord Settings → Activity Privacy → Display current activity
+- DLL files missing - Verify all three files (MobaXterm.exe, final.dll, discord-rpc.dll) are in the installation directory
+</Warning>
+
+### Discord Application ID
+
+The integration uses Discord Application ID: `1347921816777392244`
+
+This is hardcoded in both versions:
+
+```cpp
+Discord_Initialize("1347921816777392244", &handlers, 1, NULL);
+```
+
+## Uninstalling
+
+To remove the Discord RPC integration:
+
+1. Close MobaXterm completely
+2. Navigate to the installation directory
+3. Delete the modified `MobaXterm.exe`, `final.dll`, and `discord-rpc.dll`
+4. Restore your backup `MobaXterm.exe`
+5. Restart MobaXterm
+
+## Next Steps
+
+Now that you have MobaXterm Discord RPC installed:
+
+<CardGroup cols={2}>
+  <Card title="Understanding Versions" icon="book" href="/guides/versions">
+    Learn more about the differences between complete and silence versions
+  </Card>
+  
+  <Card title="Build from Source" icon="hammer" href="/guides/building">
+    Advanced users can build the integration themselves
+  </Card>
+</CardGroup>

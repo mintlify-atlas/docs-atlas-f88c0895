@@ -1,0 +1,356 @@
+---
+title: Architecture
+description: Technical implementation details of MobaXterm Discord RPC
+---
+
+## Overview
+
+MobaXterm Discord RPC uses DLL injection to integrate Discord Rich Presence functionality into MobaXterm. The implementation consists of two main components:
+
+- **Discord RPC DLL** - A custom DLL that handles Discord integration
+- **Modified MobaXterm.exe** - The original executable with an added import table entry
+
+## DLL Injection Approach
+
+The project uses **Import Table Modification** rather than traditional runtime DLL injection. This approach modifies the MobaXterm executable's import table to automatically load the Discord RPC DLL on startup.
+
+<Info>
+This method is more stable than runtime injection because the DLL is loaded by the Windows loader as part of the normal process initialization.
+</Info>
+
+### Import Table Modification Process
+
+1. Original `MobaXterm.exe` is opened in CFF Explorer
+2. Navigate to Import Adder section
+3. Add `discord-rpc.dll` as a new module dependency
+4. Export required functions (import by name)
+5. Rebuild the import table
+6. Save the modified executable
+
+<Warning>
+Always backup the original `MobaXterm.exe` before modification. The modified executable depends on `discord-rpc.dll` and `final.dll` being present in the same directory.
+</Warning>
+
+## Threading Model
+
+### DllMain Entry Point
+
+The DLL uses `DllMain` to manage the Discord RPC lifecycle:
+
+```cpp
+BOOL APIENTRY DllMain(HMODULE hModule,
+    DWORD  ul_reason_for_call,
+    LPVOID lpReserved
+)
+{
+    switch (ul_reason_for_call)
+    {
+    case DLL_PROCESS_ATTACH:
+        DisableThreadLibraryCalls(hModule);
+        memset(&currentState, 0, sizeof(currentState));
+        g_ThreadHandle = CreateThread(NULL, 0, DiscordThread, NULL, 0, NULL);
+        break;
+    case DLL_PROCESS_DETACH:
+        if (g_ThreadHandle != NULL) {
+            g_Running = false;
+            WaitForSingleObject(g_ThreadHandle, 1000);
+            CloseHandle(g_ThreadHandle);
+        }
+        break;
+    }
+    return TRUE;
+}
+```
+
+**Key behaviors:**
+
+- **DLL_PROCESS_ATTACH**: Creates the Discord thread when MobaXterm starts
+- **DLL_PROCESS_DETACH**: Gracefully shuts down the Discord connection (1 second timeout)
+- **DisableThreadLibraryCalls**: Optimization to prevent unnecessary DLL notifications
+
+### Discord Thread
+
+The Discord RPC runs in a separate thread to avoid blocking the main MobaXterm process:
+
+```cpp
+DWORD WINAPI DiscordThread(LPVOID lpParam) {
+    DiscordEventHandlers handlers;
+    memset(&handlers, 0, sizeof(handlers));
+    handlers.ready = HandleDiscordReady;
+
+    Discord_Initialize("1347921816777392244", &handlers, 1, NULL);
+    g_StartTimestamp = time(0);
+
+    while (g_Running) {
+        UpdateMobaState();
+        UpdateDiscordPresence();
+        Discord_RunCallbacks();
+        Sleep(500); // Update every 500ms
+    }
+
+    Discord_Shutdown();
+    return 0;
+}
+```
+
+<Note>
+The Discord Application ID is `1347921816777392244`. This must be registered in the Discord Developer Portal with the appropriate image assets.
+</Note>
+
+## Discord RPC Integration
+
+### Initialization
+
+The Discord SDK is initialized with event handlers:
+
+```cpp
+DiscordEventHandlers handlers;
+memset(&handlers, 0, sizeof(handlers));
+handlers.ready = HandleDiscordReady;
+
+Discord_Initialize("1347921816777392244", &handlers, 1, NULL);
+```
+
+**Parameters:**
+- `"1347921816777392244"` - Discord Application ID
+- `&handlers` - Struct containing callback functions
+- `1` - Auto-register flag (enables Discord to launch the app)
+- `NULL` - Optional steam ID
+
+### Presence Updates
+
+The `UpdateDiscordPresence()` function constructs and sends presence data:
+
+```cpp
+void UpdateDiscordPresence() {
+    DiscordRichPresence presence;
+    memset(&presence, 0, sizeof(presence));
+    
+    presence.startTimestamp = g_StartTimestamp;
+    presence.largeImageKey = "moba-logo";
+    presence.largeImageText = "MobaXterm";
+    
+    if (currentState.isEditing) {
+        presence.state = "Editando archivos";
+        presence.details = "Usando el editor de texto";
+        presence.smallImageKey = "moba-logo";
+        presence.smallImageText = "Editor";
+    }
+    // ... additional states
+
+    Discord_UpdatePresence(&presence);
+}
+```
+
+### Callback Processing
+
+`Discord_RunCallbacks()` must be called regularly to process Discord events:
+
+```cpp
+while (g_Running) {
+    UpdateMobaState();
+    UpdateDiscordPresence();
+    Discord_RunCallbacks();
+    Sleep(500);
+}
+```
+
+## Process Monitoring
+
+### IsProcessRunning Implementation
+
+The system monitors MobaXterm child processes to determine user activity:
+
+```cpp
+bool IsProcessRunning(const wchar_t* processName) {
+    static HANDLE snapshot = INVALID_HANDLE_VALUE;
+    static DWORD lastCheck = 0;
+    DWORD currentTime = GetTickCount();
+    
+    // Update snapshot every 500ms
+    if (currentTime - lastCheck > 500 || snapshot == INVALID_HANDLE_VALUE) {
+        if (snapshot != INVALID_HANDLE_VALUE) CloseHandle(snapshot);
+        snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        lastCheck = currentTime;
+    }
+
+    if (snapshot == INVALID_HANDLE_VALUE) return false;
+
+    PROCESSENTRY32W pe32;
+    pe32.dwSize = sizeof(pe32);
+
+    if (!Process32FirstW(snapshot, &pe32)) return false;
+
+    do {
+        if (_wcsicmp(pe32.szExeFile, processName) == 0) {
+            return true;
+        }
+    } while (Process32NextW(snapshot, &pe32));
+
+    return false;
+}
+```
+
+<Tip>
+The snapshot is cached and only refreshed every 500ms to reduce system overhead. This optimization is critical for performance.
+</Tip>
+
+### State Detection
+
+The `UpdateMobaState()` function checks for specific MobaXterm processes:
+
+```cpp
+void UpdateMobaState() {
+    currentState.isEditing = IsProcessRunning(L"MobaRTE.exe");
+    currentState.isTerminalActive = IsProcessRunning(L"MoTTY.exe");
+    currentState.isLocalBash = bashrun();
+}
+
+bool bashrun() {
+    return IsProcessRunning(L"bash.exe") && IsProcessRunning(L"MoTTY.exe");
+}
+```
+
+**Monitored processes:**
+
+| Process | Indicates |
+|---------|----------|
+| `MobaRTE.exe` | Text editor is active |
+| `MoTTY.exe` | Terminal session is open |
+| `bash.exe` + `MoTTY.exe` | Local Bash session |
+
+## State Machine
+
+The presence updates follow a priority hierarchy:
+
+```cpp
+if (currentState.isEditing) {
+    // Priority 1: Editing files
+}
+else if (currentState.isLocalBash) {
+    // Priority 2: Local Bash terminal
+}
+else if (currentState.isTerminalActive) {
+    // Priority 3: Generic terminal
+}
+else {
+    // Priority 4: Idle/main window
+}
+```
+
+## Exported Functions
+
+### StartDiscordRPC()
+
+The DLL exports a single function that can be called externally:
+
+```cpp
+extern "C" __declspec(dllexport) void StartDiscordRPC()
+{
+    if (g_ThreadHandle == NULL) {
+        g_Running = true;
+        g_ThreadHandle = CreateThread(NULL, 0, DiscordThread, NULL, 0, NULL);
+    }
+}
+```
+
+**Purpose:**
+- Provides a way to manually start Discord RPC if it wasn't auto-started
+- Includes thread safety check to prevent duplicate threads
+- Useful for debugging or custom integration scenarios
+
+<Info>
+In normal operation, `StartDiscordRPC()` is not needed because `DllMain` automatically starts the thread on `DLL_PROCESS_ATTACH`.
+</Info>
+
+## Version Differences
+
+### Complete Version (complete.cpp)
+
+- Full process monitoring with state detection
+- Updates presence based on active MobaXterm features
+- Uses 500ms polling interval for process snapshots
+- Displays detailed state (editing, terminal type, etc.)
+
+### Silence Version (silence.cpp)
+
+Minimal implementation that only shows MobaXterm is running:
+
+```cpp
+DiscordRichPresence presence;
+memset(&presence, 0, sizeof(presence));
+presence.state = "";
+presence.details = "";
+presence.startTimestamp = time(0);
+presence.largeImageKey = "mobaxterm-logo";
+
+Discord_UpdatePresence(&presence);
+```
+
+**Key differences:**
+- No process monitoring
+- No state updates after initialization
+- Lower CPU usage
+- Simpler implementation
+
+## Performance Considerations
+
+<Accordion title="Update Frequency">
+The 500ms update interval balances responsiveness with CPU usage:
+
+```cpp
+Sleep(500); // Update every 500ms
+```
+
+This means:
+- Discord presence updates up to 2 times per second
+- Process snapshots are cached for 500ms
+- Minimal impact on MobaXterm performance
+</Accordion>
+
+<Accordion title="Thread Safety">
+Global state is protected through single-threaded access:
+
+```cpp
+HANDLE g_ThreadHandle = NULL;
+bool g_Running = true;
+time_t g_StartTimestamp = 0;
+```
+
+Only the Discord thread modifies these variables. The main MobaXterm process only reads `g_Running` during shutdown.
+</Accordion>
+
+<Accordion title="Memory Management">
+The implementation uses stack allocation and careful cleanup:
+
+- Process snapshots are properly closed with `CloseHandle()`
+- Thread handles are waited on and closed during shutdown
+- No dynamic memory allocation in the hot path
+</Accordion>
+
+## Build Configuration
+
+### Required Libraries
+
+```cpp
+#include <windows.h>      // Windows API
+#include "discord_rpc.h"   // Discord SDK
+#include <time.h>          // Timestamps
+#include <tlhelp32.h>      // Process enumeration
+#include <psapi.h>         // Process status API
+```
+
+### Compiler Settings
+
+<Warning>
+The DLL must be compiled for 32-bit (x86) architecture to match MobaXterm's architecture.
+</Warning>
+
+**Required exports:**
+```cpp
+extern "C" __declspec(dllexport) void StartDiscordRPC()
+```
+
+**Link dependencies:**
+- `discord-rpc.lib` (from Discord RPC SDK)
+- Standard Windows libraries (kernel32, psapi, etc.)

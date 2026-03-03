@@ -1,0 +1,515 @@
+---
+title: Troubleshooting
+description: Solutions to common issues with MobaXterm Discord RPC
+---
+
+## Common Issues
+
+### Installation Problems
+
+<Accordion title="MobaXterm won't start after installing">
+**Cause:** Missing DLL dependencies or incorrect file placement.
+
+**Solutions:**
+
+1. **Verify all required files are present:**
+   ```cmd
+   C:\Program Files (x86)\Mobatek\MobaXterm\
+   ├── MobaXterm.exe (modified)
+   ├── discord-rpc.dll
+   └── final.dll
+   ```
+
+2. **Check DLL architecture:**
+   - Both DLLs must be 32-bit (x86)
+   - MobaXterm is a 32-bit application
+   - 64-bit DLLs will cause load failures
+
+3. **Restore from backup:**
+   ```cmd
+   # Replace with original executable
+   copy MobaXterm.exe.backup MobaXterm.exe
+   ```
+
+4. **Check Windows Event Viewer:**
+   - Open Event Viewer → Windows Logs → Application
+   - Look for errors from MobaXterm.exe
+   - Common errors: "The application failed to initialize" or "DLL not found"
+
+<Tip>
+Always keep a backup of the original `MobaXterm.exe` before modification.
+</Tip>
+</Accordion>
+
+<Accordion title="Permission denied when replacing files">
+**Cause:** Administrator privileges required to modify Program Files.
+
+**Solutions:**
+
+1. **Close MobaXterm completely:**
+   - Check Task Manager for any `MobaXterm.exe`, `MoTTY.exe`, or `MobaRTE.exe` processes
+   - End all related processes
+
+2. **Run File Explorer as Administrator:**
+   ```cmd
+   # Open elevated Command Prompt
+   # Win + X → Command Prompt (Admin)
+   cd "C:\Program Files (x86)\Mobatek\MobaXterm"
+   copy /Y "C:\Downloads\MobaXterm.exe" .
+   copy /Y "C:\Downloads\discord-rpc.dll" .
+   copy /Y "C:\Downloads\final.dll" .
+   ```
+
+3. **Disable antivirus temporarily:**
+   - Some antivirus software blocks modifications to executables
+   - Temporarily disable real-time protection
+   - Re-enable after installation
+
+<Warning>
+Never modify files while MobaXterm is running. This can corrupt the executable.
+</Warning>
+</Accordion>
+
+<Accordion title="Error: The specified module could not be found">
+**Cause:** `discord-rpc.dll` or `final.dll` is missing or in the wrong location.
+
+**Solutions:**
+
+1. **Verify file locations:**
+   ```cmd
+   dir "C:\Program Files (x86)\Mobatek\MobaXterm\discord-rpc.dll"
+   dir "C:\Program Files (x86)\Mobatek\MobaXterm\final.dll"
+   ```
+
+2. **Download correct DLL version:**
+   - Get `discord-rpc.dll` from the [Discord RPC releases](https://github.com/discord/discord-rpc/releases)
+   - Use the **win32-dynamic** version (32-bit)
+   - Get `final.dll` from [project releases](https://github.com/poloputoamo/mobaxterm-discord-rpc/releases)
+
+3. **Check for missing dependencies:**
+   ```cmd
+   # Use Dependency Walker or similar tool
+   # Check if discord-rpc.dll needs additional runtime libraries
+   ```
+
+4. **Install Visual C++ Redistributables:**
+   - [Download VC++ Redistributable (x86)](https://aka.ms/vs/17/release/vc_redist.x86.exe)
+   - Install both 2015-2022 versions
+</Accordion>
+
+<Accordion title="Wrong version installed (Complete vs Silence)">
+**Symptoms:** No presence updates, or excessive CPU usage.
+
+**Solutions:**
+
+1. **Identify current version:**
+   - **Complete**: Shows detailed status (editing, terminal, bash)
+   - **Silence**: Only shows "MobaXterm" with no details
+
+2. **Switch versions:**
+   ```cmd
+   # Download the desired version from releases
+   # Both are named MobaXterm.exe, so rename before replacing
+   
+   cd "C:\Program Files (x86)\Mobatek\MobaXterm"
+   copy MobaXterm.exe MobaXterm.exe.current
+   copy "C:\Downloads\mobaxterm-complete.exe" MobaXterm.exe
+   # OR
+   copy "C:\Downloads\mobaxterm-silence.exe" MobaXterm.exe
+   ```
+
+<Info>
+The **Complete** version uses more CPU due to process monitoring every 500ms. Use **Silence** if you prefer minimal resource usage.
+</Info>
+</Accordion>
+
+### Discord Presence Issues
+
+<Accordion title="Discord not showing MobaXterm status">
+**Cause:** Discord app not running, privacy settings, or initialization failure.
+
+**Solutions:**
+
+1. **Verify Discord is running:**
+   - Discord desktop app must be running (not web version)
+   - Check Task Manager for `Discord.exe`
+   - Restart Discord if needed
+
+2. **Check Discord privacy settings:**
+   - Open Discord → User Settings → Activity Settings
+   - Enable "Display current activity as a status message"
+   - Ensure "Activity Privacy" is not blocking Rich Presence
+
+3. **Verify initialization:**
+   The Discord thread should initialize with this Application ID:
+   ```cpp
+   Discord_Initialize("1347921816777392244", &handlers, 1, NULL);
+   ```
+
+4. **Check Discord Developer Portal:**
+   - Application ID `1347921816777392244` must exist
+   - Required image assets:
+     - `moba-logo` (large image)
+     - `bash` (small image for bash sessions)
+     - `terminal` (small image for terminal)
+     - `mobaxterm-logo` (silence version)
+
+5. **Restart both applications:**
+   ```cmd
+   # Close MobaXterm completely
+   taskkill /F /IM MobaXterm.exe
+   taskkill /F /IM Discord.exe
+   
+   # Start Discord first, then MobaXterm
+   ```
+
+<Note>
+Rich Presence can take 15-30 seconds to appear after launching MobaXterm. This is normal Discord behavior.
+</Note>
+</Accordion>
+
+<Accordion title="Presence shows but never updates">
+**Cause:** Thread not running or state detection failing.
+
+**Solutions:**
+
+1. **Verify you're using the Complete version:**
+   - Only `mobaxterm-complete` updates based on activity
+   - `mobaxterm-silence` never changes after initialization
+
+2. **Check process monitoring:**
+   The complete version monitors these processes:
+   ```cpp
+   currentState.isEditing = IsProcessRunning(L"MobaRTE.exe");
+   currentState.isTerminalActive = IsProcessRunning(L"MoTTY.exe");
+   currentState.isLocalBash = bashrun(); // bash.exe + MoTTY.exe
+   ```
+
+3. **Verify processes are running:**
+   ```cmd
+   # Open a terminal in MobaXterm, then check:
+   tasklist | findstr "MoTTY"
+   
+   # Open the text editor, then check:
+   tasklist | findstr "MobaRTE"
+   ```
+
+4. **Check update interval:**
+   - Updates occur every 500ms
+   - State changes should be reflected within 1 second
+   - If not updating, the Discord thread may have crashed
+
+<Warning>
+If the Discord thread crashes, you'll need to restart MobaXterm. The thread is created in `DllMain` and cannot be restarted without reloading the DLL.
+</Warning>
+</Accordion>
+
+<Accordion title="Presence shows wrong status">
+**Cause:** State detection priority or timing issues.
+
+**Solutions:**
+
+1. **Understand state priority:**
+   ```cpp
+   if (currentState.isEditing) {
+       // Priority 1: Shows "Editing files"
+   }
+   else if (currentState.isLocalBash) {
+       // Priority 2: Shows "Local Bash"
+   }
+   else if (currentState.isTerminalActive) {
+       // Priority 3: Shows "Active terminal"
+   }
+   else {
+       // Priority 4: Shows "Inactive"
+   }
+   ```
+
+2. **Wait for state refresh:**
+   - Process monitoring updates every 500ms
+   - Close the higher-priority application
+   - Wait 1 second for the state to update
+
+3. **Verify process names:**
+   - Some MobaXterm installations may use different executable names
+   - Check actual process names in Task Manager
+   - Modify source code if necessary and rebuild
+</Accordion>
+
+<Accordion title="Images not showing in Discord">
+**Cause:** Missing assets in Discord Application configuration.
+
+**Solutions:**
+
+1. **Required image assets:**
+   
+   For **mobaxterm-complete**:
+   - `moba-logo` - Large image and small image for editor
+   - `bash` - Small image for bash sessions
+   - `terminal` - Small image for terminal sessions
+   
+   For **mobaxterm-silence**:
+   - `mobaxterm-logo` - Large image
+
+2. **Upload assets to Discord:**
+   - Visit [Discord Developer Portal](https://discord.com/developers/applications)
+   - Open application `1347921816777392244`
+   - Go to Rich Presence → Art Assets
+   - Upload images with exact key names
+
+3. **Asset requirements:**
+   - Minimum size: 512x512 pixels
+   - Maximum size: 4096x4096 pixels
+   - Supported formats: PNG, JPG
+
+<Tip>
+Asset changes can take 5-10 minutes to propagate through Discord's CDN. Restart Discord after uploading new assets.
+</Tip>
+</Accordion>
+
+### Performance Issues
+
+<Accordion title="High CPU usage">
+**Cause:** Process monitoring overhead or update frequency too high.
+
+**Solutions:**
+
+1. **Switch to Silence version:**
+   - No process monitoring
+   - Minimal CPU usage
+   - Loses detailed status updates
+
+2. **Adjust update frequency:**
+   Modify `complete.cpp` and rebuild:
+   ```cpp
+   while (g_Running) {
+       UpdateMobaState();
+       UpdateDiscordPresence();
+       Discord_RunCallbacks();
+       Sleep(1000); // Changed from 500ms to 1000ms
+   }
+   ```
+
+3. **Adjust snapshot cache duration:**
+   Modify the process monitoring cache:
+   ```cpp
+   // Update snapshot every 1000ms instead of 500ms
+   if (currentTime - lastCheck > 1000 || snapshot == INVALID_HANDLE_VALUE) {
+       // ...
+   }
+   ```
+
+4. **Monitor resource usage:**
+   ```cmd
+   # Check CPU usage
+   tasklist /FI "IMAGENAME eq MobaXterm.exe" /V
+   ```
+
+<Info>
+Typical CPU usage for the Complete version should be less than 1%. If higher, consider the Silence version or increase sleep intervals.
+</Info>
+</Accordion>
+
+<Accordion title="MobaXterm feels sluggish">
+**Cause:** Thread priority or excessive polling.
+
+**Solutions:**
+
+1. **The Discord thread uses default priority:**
+   - Should not impact MobaXterm performance
+   - The 500ms sleep prevents busy-waiting
+
+2. **Check for other issues:**
+   ```cmd
+   # Verify only one MobaXterm instance is running
+   tasklist | findstr "Moba"
+   
+   # Check for memory leaks
+   # Look for growing memory usage over time
+   ```
+
+3. **Disable Discord RPC temporarily:**
+   - Rename or remove `final.dll`
+   - Restart MobaXterm
+   - If performance improves, the issue is with the RPC integration
+
+4. **Use Process Explorer:**
+   - Download [Process Explorer](https://docs.microsoft.com/en-us/sysinternals/downloads/process-explorer)
+   - Check thread activity in MobaXterm process
+   - Verify Discord thread CPU usage
+</Accordion>
+
+### Verification and Testing
+
+<Accordion title="How to verify installation worked">
+**Steps:**
+
+1. **Check file presence:**
+   ```cmd
+   dir "C:\Program Files (x86)\Mobatek\MobaXterm" | findstr /I "discord final"
+   ```
+   Should show:
+   - `discord-rpc.dll`
+   - `final.dll`
+
+2. **Launch MobaXterm:**
+   - Application should start normally
+   - No error messages or crashes
+
+3. **Open Discord:**
+   - Wait 15-30 seconds
+   - Check your Discord profile
+   - Should show "Playing MobaXterm" or similar
+
+4. **Test state changes (Complete version only):**
+   - Open a terminal → Should show "Active terminal" or "Terminal"
+   - Start a bash session → Should show "Local Bash"
+   - Open text editor → Should show "Editing files"
+
+5. **Check thread creation:**
+   - Use Process Explorer
+   - Examine MobaXterm.exe threads
+   - Should see `DiscordThread` running
+
+<Tip>
+If Discord shows the presence but with missing images, the core integration is working—you just need to upload the image assets.
+</Tip>
+</Accordion>
+
+<Accordion title="How to enable debug logging">
+The current implementation doesn't include logging. To add debugging:
+
+1. **Add file logging to DllMain:**
+   ```cpp
+   #include <fstream>
+   
+   void Log(const char* message) {
+       std::ofstream log("C:\\Temp\\mobaxterm-rpc.log", std::ios::app);
+       log << message << std::endl;
+   }
+   
+   BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
+       switch (ul_reason_for_call) {
+       case DLL_PROCESS_ATTACH:
+           Log("DLL attached, starting Discord thread");
+           // ...
+       }
+   }
+   ```
+
+2. **Add state logging:**
+   ```cpp
+   void UpdateDiscordPresence() {
+       // ... existing code ...
+       
+       if (currentState.isEditing) {
+           Log("State: Editing");
+       } else if (currentState.isLocalBash) {
+           Log("State: Local Bash");
+       }
+       // ...
+   }
+   ```
+
+3. **Rebuild the DLL** with logging enabled
+
+4. **Check log file:**
+   ```cmd
+   type C:\Temp\mobaxterm-rpc.log
+   ```
+</Accordion>
+
+### Uninstallation
+
+<Accordion title="How to completely remove Discord RPC">
+**Steps:**
+
+1. **Close MobaXterm:**
+   ```cmd
+   taskkill /F /IM MobaXterm.exe
+   taskkill /F /IM MoTTY.exe
+   taskkill /F /IM MobaRTE.exe
+   ```
+
+2. **Restore original executable:**
+   ```cmd
+   cd "C:\Program Files (x86)\Mobatek\MobaXterm"
+   copy /Y MobaXterm.exe.backup MobaXterm.exe
+   ```
+
+3. **Remove DLL files:**
+   ```cmd
+   del discord-rpc.dll
+   del final.dll
+   ```
+
+4. **Verify restoration:**
+   - Launch MobaXterm normally
+   - Should work without Discord integration
+   - No presence in Discord
+
+5. **Clean up backups (optional):**
+   ```cmd
+   del MobaXterm.exe.backup
+   ```
+
+<Warning>
+If you didn't create a backup before installation, you'll need to reinstall MobaXterm from the official installer.
+</Warning>
+</Accordion>
+
+<Accordion title="Restore from corrupted installation">
+If MobaXterm won't start and you don't have a backup:
+
+1. **Download MobaXterm installer:**
+   - Visit [official website](https://mobaxterm.mobatek.net/download.html)
+   - Download the installer (not portable version)
+
+2. **Repair installation:**
+   ```cmd
+   # Run installer
+   # Choose "Repair" option
+   # This will restore original files
+   ```
+
+3. **Or perform clean reinstall:**
+   ```cmd
+   # Uninstall via Control Panel
+   # Delete installation directory
+   rmdir /S "C:\Program Files (x86)\Mobatek\MobaXterm"
+   
+   # Reinstall from official installer
+   ```
+
+4. **Restore settings:**
+   - MobaXterm settings are stored separately
+   - Usually preserved during reinstallation
+   - Located in `%USERPROFILE%\Documents\MobaXterm`
+</Accordion>
+
+## Getting Help
+
+If you encounter issues not covered here:
+
+1. **Check the project repository:**
+   - [GitHub Issues](https://github.com/poloputoamo/mobaxterm-discord-rpc/issues)
+   - Search for similar problems
+
+2. **Provide diagnostic information:**
+   - Windows version
+   - MobaXterm version
+   - Discord version
+   - Which variant (Complete or Silence)
+   - Error messages or screenshots
+
+3. **Include log files:**
+   - Windows Event Viewer logs
+   - Custom debug logs (if implemented)
+
+4. **Test with Silence version:**
+   - If Complete version fails, try Silence
+   - Helps isolate process monitoring issues
+
+<Note>
+Most issues are related to missing DLLs or incorrect file placement. Always verify file locations first.
+</Note>

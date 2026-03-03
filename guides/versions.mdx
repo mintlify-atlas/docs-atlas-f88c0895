@@ -1,0 +1,227 @@
+---
+title: 'Version Types'
+description: 'Understanding the complete and silence versions of MobaXterm Discord RPC'
+icon: 'layer-group'
+---
+
+MobaXterm Discord RPC comes in two distinct versions, each designed for different use cases. Choose the version that best fits your privacy preferences and desired level of detail.
+
+## Complete Version
+
+The **complete** version provides detailed activity tracking, showing exactly what you're working on in MobaXterm.
+
+### Features
+
+<Info>
+The complete version tracks:
+- Active MobaRTE text editor sessions
+- Open terminal sessions (MoTTY)
+- Local Bash session detection
+- Real-time state updates every 500ms
+</Info>
+
+### How It Works
+
+The complete version monitors running processes to detect your current activity:
+
+```cpp complete.cpp
+void UpdateMobaState() {
+    currentState.isEditing = IsProcessRunning(L"MobaRTE.exe");
+    currentState.isTerminalActive = IsProcessRunning(L"MoTTY.exe");
+    currentState.isLocalBash = bashrun();
+}
+
+bool bashrun() {
+    return IsProcessRunning(L"bash.exe") && IsProcessRunning(L"MoTTY.exe");
+}
+```
+
+The presence is dynamically updated based on detected activity:
+
+```cpp complete.cpp
+void UpdateDiscordPresence() {
+    DiscordRichPresence presence;
+    memset(&presence, 0, sizeof(presence));
+    
+    presence.startTimestamp = g_StartTimestamp;
+    presence.largeImageKey = "moba-logo";
+    presence.largeImageText = "MobaXterm";
+    
+    if (currentState.isEditing) {
+        presence.state = "Editando archivos";
+        presence.details = "Usando el editor de texto";
+        presence.smallImageKey = "moba-logo";
+        presence.smallImageText = "Editor";
+    }
+    else if (currentState.isLocalBash) {
+        presence.state = "Terminal local";
+        presence.details = "Bash";
+        presence.smallImageKey = "bash";
+        presence.smallImageText = "Local Bash";
+    }
+    else if (currentState.isTerminalActive) {
+        presence.state = "Terminal activa";
+        presence.details = "Terminal";
+        presence.smallImageKey = "terminal";
+        presence.smallImageText = "Terminal";
+    }
+    else {
+        presence.state = "MobaXterm";
+        presence.details = "Inactivo";
+    }
+
+    Discord_UpdatePresence(&presence);
+}
+```
+
+### Discord Display Examples
+
+Depending on your activity, the complete version shows:
+
+- **Editing files**: "Usando el editor de texto" with editor icon
+- **Local Bash**: "Terminal local" with bash icon
+- **Terminal active**: "Terminal activa" with terminal icon
+- **Idle**: "MobaXterm" with inactive status
+
+---
+
+## Silence Version
+
+The **silence** version provides minimal presence information, only showing that MobaXterm is running.
+
+### Features
+
+<Info>
+The silence version:
+- Shows only basic "MobaXterm is running" status
+- No activity tracking
+- No process monitoring
+- Minimal resource usage
+</Info>
+
+### How It Works
+
+The silence version sets a static presence once and maintains it:
+
+```cpp silence.cpp
+DWORD WINAPI DiscordThread(LPVOID lpParam) {
+    DiscordEventHandlers handlers;
+    memset(&handlers, 0, sizeof(handlers));
+    handlers.ready = HandleDiscordReady;
+
+    Discord_Initialize("1347921816777392244", &handlers, 1, NULL);
+
+    DiscordRichPresence presence;
+    memset(&presence, 0, sizeof(presence));
+    presence.state = "";
+    presence.details = "";
+    presence.startTimestamp = time(0);
+    presence.largeImageKey = "mobaxterm-logo";
+
+    Discord_UpdatePresence(&presence);
+
+    while (g_Running) {
+        Discord_RunCallbacks();
+        Sleep(500);
+    }
+
+    Discord_Shutdown();
+    return 0;
+}
+```
+
+---
+
+## Code Comparison
+
+<Tabs>
+  <Tab title="Complete">
+    ```cpp complete.cpp
+    struct MobaState {
+        bool isEditing;
+        bool isTerminalActive;
+        bool isLocalBash;
+        HWND activeWindow;
+    } currentState;
+
+    DWORD WINAPI DiscordThread(LPVOID lpParam) {
+        // Initialize handlers and Discord
+        DiscordEventHandlers handlers;
+        memset(&handlers, 0, sizeof(handlers));
+        handlers.ready = HandleDiscordReady;
+
+        Discord_Initialize("1347921816777392244", &handlers, 1, NULL);
+        g_StartTimestamp = time(0);
+
+        while (g_Running) {
+            UpdateMobaState();           // Track processes
+            UpdateDiscordPresence();     // Update presence
+            Discord_RunCallbacks();
+            Sleep(500);
+        }
+
+        Discord_Shutdown();
+        return 0;
+    }
+    ```
+  </Tab>
+  <Tab title="Silence">
+    ```cpp silence.cpp
+    DWORD WINAPI DiscordThread(LPVOID lpParam) {
+        DiscordEventHandlers handlers;
+        memset(&handlers, 0, sizeof(handlers));
+        handlers.ready = HandleDiscordReady;
+
+        Discord_Initialize("1347921816777392244", &handlers, 1, NULL);
+
+        // Static presence - set once
+        DiscordRichPresence presence;
+        memset(&presence, 0, sizeof(presence));
+        presence.state = "";
+        presence.details = "";
+        presence.startTimestamp = time(0);
+        presence.largeImageKey = "mobaxterm-logo";
+
+        Discord_UpdatePresence(&presence);
+
+        while (g_Running) {
+            Discord_RunCallbacks();  // No state updates
+            Sleep(500);
+        }
+
+        Discord_Shutdown();
+        return 0;
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Which Version Should You Choose?
+
+<CardGroup cols={2}>
+  <Card title="Complete" icon="chart-line">
+    **Best for:**
+    - Developers who want to showcase their work
+    - Users who prefer detailed status updates
+    - Those who don't mind process monitoring
+    
+    **Trade-offs:**
+    - Higher resource usage (process scanning)
+    - More detailed activity visibility
+  </Card>
+  
+  <Card title="Silence" icon="user-secret">
+    **Best for:**
+    - Privacy-focused users
+    - Minimal Discord presence
+    - Lower resource consumption
+    
+    **Trade-offs:**
+    - No activity details shown
+    - Static presence only
+  </Card>
+</CardGroup>
+
+<Warning>
+Both versions require modifying the original MobaXterm.exe file. Always backup your installation before proceeding with either version.
+</Warning>
